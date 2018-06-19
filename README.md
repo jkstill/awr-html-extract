@@ -46,7 +46,7 @@ Top 10 from each of :
 
 Example:
 
-
+```bash
 ./parse-awr.pl awrrpt*.txt
 
 Begin Time: 25-Sep-17 08:00:01
@@ -85,5 +85,5 @@ DB Seconds: 282987
 -rwxr-xr-x 1 oracle dba  9229 Jun 19 15:28 sql-by-io.csv
 -rwxr-xr-x 1 oracle dba  5729 Jun 19 15:28 time-model-stats.csv
 -rwxr-xr-x 1 oracle dba  2180 Jun 19 15:28 top-foreground-events.csv
-
+```
 
