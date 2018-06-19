@@ -4,7 +4,7 @@
 
 HTML AWR reports have been converted to asciidoc via pandoc
 
-[pandoc](http://github.com)
+[pandoc](https://pandoc.org/)
 
 pandoc --columns=65000 --eol=lf --ascii -f html -t asciidoc INFILE -o OUTfILE
 
