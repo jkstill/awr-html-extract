@@ -10,7 +10,7 @@ pandoc --columns=65000 --eol=lf --ascii -f html -t asciidoc INFILE -o OUTfILE
 
 ## Why do this?
 
-Becuase sometimes the only available AWR data is from HTML reports that have been saved.
+Because sometimes the only available AWR data is from HTML reports that have been saved.
 
 Otherwise and AWR diff report would have be quite useful.
 
