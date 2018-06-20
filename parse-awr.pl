@@ -122,6 +122,7 @@ while (<$fh>) {
 	
 	chomp;
 	my $line=$_;
+	$line =~ s/[^[:ascii:]]//g;
 
 	# look first for the report info
 
@@ -231,6 +232,14 @@ while (<$fh>) {
 	next unless $line;
 	# trim trailing space if any
 	$line =~ s/\s+$//g;
+
+	# convert link:#b4j3qz75jr2k6[b4j3qz75jr2k6] to just the SQL_ID
+	# |1,971.82 |1 |1,971.82 |1.21 |99.97 |0.00 |link:#9zt679fsw5an6[9zt679fsw5an6] |cli@message_group_count.php |SELECT count(*) FROM ( SELECT...
+	# fix this regex another time
+	#$line =~ s/^(.++)\|link:#.+\[(.++)\](.*)$/$1$2$3/;
+	# these 2 simple ones will do it for now
+	$line =~ s/link:#.+\[//go;
+	$line =~ s/\]//go;
 
 	if ($headerSearch) {
 		#print "line: $line\n";
@@ -389,12 +398,19 @@ beginTime: $beginTime
 		my @columns=@{$rptData{$beginTime}->{$heading}{columns}};
 		unshift @columns, 'BeginTime','ElapsedSeconds','DBSeconds';
 
+		# remove the delimiter from the data as needed
+		$_ =~ s/$delimiter//g for @columns;
+
 		print { $rptFormat{$heading}->[4] } join("$delimiter",@columns),"\n" if $printColumnNames;
 
 		foreach my $ary ( @{$rptData{$beginTime}->{$heading}{data}} ) {
 			#my @data=@{$rptData{$beginTime}->{$heading}{data}[$el]};
 			my @data=@{$ary};
 			unshift @data, $beginTime, $elapsedSeconds, $dbSeconds;
+			# remove non-ascii from output data - pandoc has added 0xC2 and likely others
+			# also remove the delimiter from data, probably a comma
+			$_ =~ s/[^[:ascii:]]//g for @data;
+			$_ =~ s/$delimiter//g for @data;
 			print { $rptFormat{$heading}->[4] } join("$delimiter",@data),"\n";
 		}
 
