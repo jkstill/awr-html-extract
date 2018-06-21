@@ -112,91 +112,96 @@ foreach my $file (@ARGV) {
 my %rptData=();
 my %rptFormat = ();
 
+#print Dumper(\@ARGV);
+#exit;
+
 foreach my $file (@ARGV) {
 
-my $fh = IO::File->new;
+	my $fh = IO::File->new;
 
-$fh->open($file,'<') or die "Could not read $file - $!\n";
+	print "Opening file: $file\n" if $debug;
+	$fh->open($file,'<') or die "Could not read $file - $!\n";
+	print " Opened file: $file\n" if $debug;
 
-while (<$fh>) {
+	while (<$fh>) {
 	
-	chomp;
-	my $line=$_;
-	$line =~ s/[^[:ascii:]]//g;
+		chomp;
+		my $line=$_;
+		$line =~ s/[^[:ascii:]]//g;
 
-	# look first for the report info
+		# look first for the report info
 
-	if ($headerSearch) {
+		if ($headerSearch) {
 
-		# asciidoc data lines are delimited with '|' and always begin with the delimiter
-		my @a=split(/\|/, $line);
-		shift @a;
+			# asciidoc data lines are delimited with '|' and always begin with the delimiter
+			my @a=split(/\|/, $line);
+			shift @a;
 
-		# remove all spaces from end of elements
-		$_ =~ s/\s+$//g for @a;
+			# remove all spaces from end of elements
+			$_ =~ s/\s+$//g for @a;
 
-		#print "Searching for times\n";
-		#print Dumper(\@a);
+			print "Searching for times in file $file\n" if $debug;
+			print Dumper(\@a) if $debug;
 
-		if ( defined($a[0])) {
-			if ($a[0] =~ /Begin Snap:/) { 
-				# appears as NNN,NNN.N (mins)
-				$beginTime = $a[2]; 
-				print "Found Begin Time\n" if $debug;
-			}
-			elsif ($a[0] =~ /Elapsed:/) { 
-				# appears as NNN,NNN.N (mins)
-				$elapsedTime = (split(/\s+/,$a[2]))[0];
-				$elapsedTime =~ s/,//go;
-				$elapsedTime *= 60;
-			}
-			elsif ($a[0] =~ /DB Time:/) { 
-				print "\$a[2]: $a[2]\n" if $debug;
-				# appears as NNN,NNN.N (mins)
-				$dbTime = (split(/\s+/,$a[2]))[0];
-				$dbTime =~ s/,//go;
-				$dbTime *= 60;
+			if ( defined($a[0])) {
+				if ($a[0] =~ /Begin Snap:/) { 
+					# appears as NNN,NNN.N (mins)
+					$beginTime = $a[2]; 
+					print "Found Begin Time: $beginTime\n" if $debug;
+				}
+				elsif ($a[0] =~ /Elapsed:/) { 
+					# appears as NNN,NNN.N (mins)
+					$elapsedTime = (split(/\s+/,$a[2]))[0];
+					$elapsedTime =~ s/,//go;
+					$elapsedTime *= 60;
+				}
+				elsif ($a[0] =~ /DB Time:/) { 
+					print "\$a[2]: $a[2]\n" if $debug;
+					# appears as NNN,NNN.N (mins)
+					$dbTime = (split(/\s+/,$a[2]))[0];
+					$dbTime =~ s/,//go;
+					$dbTime *= 60;
+	
+					$headerSearch=0;
+				}
 
-				$headerSearch=0;
 			}
 
 		}
 
+		last unless $headerSearch;
 	}
 
-	last unless $headerSearch;
-}
+	# first non-blank field that indicates start of heading per section
+	# array values [first column name, column position, number of metrics to keep,output file]
 
-# first non-blank field that indicates start of heading per section
-# array values [first column name, column position, number of metrics to keep,output file]
+	%rptFormat = (
+		'Load Profile'										=> ['Per Second',1,99999,'load-profile'],
+		'Top 5 Timed Foreground Events'				=> ['Event',0,99999,'top-foreground-events'],
+		'Host CPU'											=> ['Load Average Begin',0,99999,'host-cpu'],
+		'Instance CPU'										=> ['%Total CPU',0,99999,'instance-cpu'],
+		'Memory Statistics'								=> ['Begin',1,99999,'memory-stats'],
+		'Time Model Statistics'							=> ['Statistic Name',0,99999,'time-model-stats'],
+		'Operating System Statistics'					=> ['Statistic',0,99999,'os-stats'],
+		'Operating System Statistics - Detail'		=> ['Snap Time',0,99999,'os-stats-detail'],
+		'Foreground Wait Class'							=> ['Wait Class',0,99999,'foreground-wait-class'],
+		'Foreground Wait Events'						=> ['Event',0,10,'foreground-wait-events'],
+		'Background Wait Events'						=> ['Event',0,10,'background-wait-events'],
+		'SQL ordered by Elapsed Time'					=> ['Elapsed Time (s)',0,99999,'sql-by-elapsed'],
+		'SQL ordered by CPU Time'						=> ['CPU Time (s)',0,99999,'sql-by-cpu'],
+		'SQL ordered by User I/O Wait Time'			=> ['User I/O Time (s)',0,99999,'sql-by-io'],
+	);
 
-%rptFormat = (
-	'Load Profile'										=> ['Per Second',1,99999,'load-profile'],
-	'Top 5 Timed Foreground Events'				=> ['Event',0,99999,'top-foreground-events'],
-	'Host CPU'											=> ['Load Average Begin',0,99999,'host-cpu'],
-	'Instance CPU'										=> ['%Total CPU',0,99999,'instance-cpu'],
-	'Memory Statistics'								=> ['Begin',1,99999,'memory-stats'],
-	'Time Model Statistics'							=> ['Statistic Name',0,99999,'time-model-stats'],
-	'Operating System Statistics'					=> ['Statistic',0,99999,'os-stats'],
-	'Operating System Statistics - Detail'		=> ['Snap Time',0,99999,'os-stats-detail'],
-	'Foreground Wait Class'							=> ['Wait Class',0,99999,'foreground-wait-class'],
-	'Foreground Wait Events'						=> ['Event',0,10,'foreground-wait-events'],
-	'Background Wait Events'						=> ['Event',0,10,'background-wait-events'],
-	'SQL ordered by Elapsed Time'					=> ['Elapsed Time (s)',0,99999,'sql-by-elapsed'],
-	'SQL ordered by CPU Time'						=> ['CPU Time (s)',0,99999,'sql-by-cpu'],
-	'SQL ordered by User I/O Wait Time'			=> ['User I/O Time (s)',0,99999,'sql-by-io'],
-);
-
-my @headers=keys %rptFormat;
-$headerSearch=1;
-my $currHeader='';
-my $dataSearch=0;
-my $dataFound=0;
-my $dataEnd=0;
-my $endDataMarker = '=' x 10;
-my $data='';
-my $searchColumn;
-my $searchColumnNum;
+	my @headers=keys %rptFormat;
+	$headerSearch=1;
+	my $currHeader='';
+	my $dataSearch=0;
+	my $dataFound=0;
+	my $dataEnd=0;
+	my $endDataMarker = '=' x 10;
+	my $data='';
+	my $searchColumn;
+	my $searchColumnNum;
 
 =head1 %rptData()
 
@@ -217,112 +222,112 @@ my $searchColumnNum;
 =cut
 
 
-$rptData{$beginTime}->{beginTime} = $beginTime;
-$rptData{$beginTime}->{elapsedSeconds} = $elapsedTime;
-$rptData{$beginTime}->{dbSeconds} = $dbTime;
+	$rptData{$beginTime}->{beginTime} = $beginTime;
+	$rptData{$beginTime}->{elapsedSeconds} = $elapsedTime;
+	$rptData{$beginTime}->{dbSeconds} = $dbTime;
 
-my $metricsCount=0;
-my $maxMetricsCount=0;
+	my $metricsCount=0;
+	my $maxMetricsCount=0;
 
-# now process the rest of the file
-while (<$fh>) {
+	# now process the rest of the file
+	while (<$fh>) {
 	
-	chomp;
-	my $line = $_;
-	next unless $line;
-	# trim trailing space if any
-	$line =~ s/\s+$//g;
+		chomp;
+		my $line = $_;
+		next unless $line;
+		# trim trailing space if any
+		$line =~ s/\s+$//g;
 
-	# convert link:#b4j3qz75jr2k6[b4j3qz75jr2k6] to just the SQL_ID
-	# |1,971.82 |1 |1,971.82 |1.21 |99.97 |0.00 |link:#9zt679fsw5an6[9zt679fsw5an6] |cli@message_group_count.php |SELECT count(*) FROM ( SELECT...
-	# fix this regex another time
-	#$line =~ s/^(.++)\|link:#.+\[(.++)\](.*)$/$1$2$3/;
-	# these 2 simple ones will do it for now
-	$line =~ s/link:#.+\[//go;
-	$line =~ s/\]//go;
+		# convert link:#b4j3qz75jr2k6[b4j3qz75jr2k6] to just the SQL_ID
+		# |1,971.82 |1 |1,971.82 |1.21 |99.97 |0.00 |link:#9zt679fsw5an6[9zt679fsw5an6] |cli@message_group_count.php |SELECT count(*) FROM ( SELECT...
+		# fix this regex another time
+		#$line =~ s/^(.++)\|link:#.+\[(.++)\](.*)$/$1$2$3/;
+		# these 2 simple ones will do it for now
+		$line =~ s/link:#.+\[//go;
+		$line =~ s/\]//go;
 
-	if ($headerSearch) {
-		#print "line: $line\n";
-		# quotemeta prefixes special characters with a backslash
-		print "looking for headings\n" if $debug;
-		#
-		# remove unpredictable info from Host CPU heading
-		if ($line =~ /^Host CPU /) { $line = 'Host CPU' }
+		if ($headerSearch) {
+			#print "line: $line\n";
+			# quotemeta prefixes special characters with a backslash
+			print "looking for headings\n" if $debug;
+			#
+			# remove unpredictable info from Host CPU heading
+			if ($line =~ /^Host CPU /) { $line = 'Host CPU' }
 
-		my $testLine = quotemeta($line);
+			my $testLine = quotemeta($line);
 
-		if ( grep(/^$testLine/,@headers)) {
-			print "found header: |$line|\n" if $debug;
-			$currHeader = $line;
-			$headerSearch=0;
-			$dataSearch=1;
-			$searchColumn = $rptFormat{$line}[0];
-			$searchColumnNum = $rptFormat{$line}[1];
-			$maxMetricsCount = $rptFormat{$line}[2];
-			$metricsCount = 0;
-		}
-	} elsif ( $dataSearch ) {
-
-		# look for the header line in the data
-		my @a=split(/\|/,$line);
-		shift @a;
-
-		# remove all spaces from end of elements
-		$_ =~ s/\s+$//g for @a;
-
-		if (! $dataFound ) {
-
-			#my $column
-			next unless $a[ $searchColumnNum ];
-
-			my $currColumn = $a[ $searchColumnNum ];
-			$currColumn =~ s/\s+$//o;
-
-			print "current column: |$currColumn|\n" if $debug;
-			print "Searching for |$searchColumn|\n" if $debug;
-
-			if ($currColumn eq $searchColumn ) {
-
-				print "Found Column Header: $searchColumn\n" if $debug;
-
-				print join(" : ", @a),"\n" if $debug;
-
-				$rptData{$beginTime}->{$currHeader}{columns}=\@a;
-
-				$dataFound=1;
+			if ( grep(/^$testLine/,@headers)) {
+				print "found header: |$line|\n" if $debug;
+				$currHeader = $line;
+				$headerSearch=0;
+				$dataSearch=1;
+				$searchColumn = $rptFormat{$line}[0];
+				$searchColumnNum = $rptFormat{$line}[1];
+				$maxMetricsCount = $rptFormat{$line}[2];
+				$metricsCount = 0;
 			}
-		} else { # reading data for heading
-			print "reading data\n" if $debug;
-			if ( $a[0] =~ /$endDataMarker/ ) {
-					$dataFound=0;
-					$headerSearch=1;
-					$dataSearch=0;
-					#$dataEnd=1;
-			} else {
+		} elsif ( $dataSearch ) {
 
-				if ($metricsCount++ >= $maxMetricsCount) {
-					next;
+			# look for the header line in the data
+			my @a=split(/\|/,$line);
+			shift @a;
+
+			# remove all spaces from end of elements
+			$_ =~ s/\s+$//g for @a;
+
+			if (! $dataFound ) {
+
+				#my $column
+				next unless $a[ $searchColumnNum ];
+
+				my $currColumn = $a[ $searchColumnNum ];
+				$currColumn =~ s/\s+$//o;
+
+				print "current column: |$currColumn|\n" if $debug;
+				print "Searching for |$searchColumn|\n" if $debug;
+
+				if ($currColumn eq $searchColumn ) {
+
+					print "Found Column Header: $searchColumn\n" if $debug;
+
+					print join(" : ", @a),"\n" if $debug;
+
+					$rptData{$beginTime}->{$currHeader}{columns}=\@a;
+
+					$dataFound=1;
+				}
+			} else { # reading data for heading
+				print "reading data\n" if $debug;
+				if ( $a[0] =~ /$endDataMarker/ ) {
+						$dataFound=0;
+						$headerSearch=1;
+						$dataSearch=0;
+						#$dataEnd=1;
+				} else {
+
+					if ($metricsCount++ >= $maxMetricsCount) {
+						next;
+					}
+
+					push @{$rptData{$beginTime}->{$currHeader}{data}},\@a;
+
+					print join(" : ", @a),"\n" if $debug;
+
 				}
 
-				push @{$rptData{$beginTime}->{$currHeader}{data}},\@a;
-
-				print join(" : ", @a),"\n" if $debug;
-
 			}
-
-		}
 		
-	} elsif ( $dataSearch and $headerSearch ) {
-		die "\$dataSearch and \$headerSearch should not happen\n";
-	} elsif ( ! $dataSearch and ! $headerSearch ) {
-		die "! \$dataSearch and ! \$headerSearch should not happen\n";
-	} else {
-		die "Unknown condition in header search\n";
+		} elsif ( $dataSearch and $headerSearch ) {
+			die "\$dataSearch and \$headerSearch should not happen\n";
+		} elsif ( ! $dataSearch and ! $headerSearch ) {
+			die "! \$dataSearch and ! \$headerSearch should not happen\n";
+		} else {
+			die "Unknown condition in header search\n";
+		}
+
 	}
 
-
-
-}
+	$headerSearch = 1;
 
 
 print qq{
