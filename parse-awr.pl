@@ -103,7 +103,7 @@ die "Please specify some files!\n" unless $ARGV[0];
 
 foreach my $file (@ARGV) {
 	# validate that at the least these are files that can be read
-	print "checking file $file\n" if $debug;
+	pdebug( "checking file $file");
 	unless ( -r $file ) {
 		die "could not read $file - $!\n";
 	}
@@ -119,9 +119,9 @@ foreach my $file (@ARGV) {
 
 	my $fh = IO::File->new;
 
-	print "Opening file: $file\n" if $debug;
+	pdebug("Opening file: $file");
 	$fh->open($file,'<') or die "Could not read $file - $!\n";
-	print " Opened file: $file\n" if $debug;
+	pdebug("Opened file: $file");
 
 	while (<$fh>) {
 	
@@ -140,14 +140,14 @@ foreach my $file (@ARGV) {
 			# remove all spaces from end of elements
 			$_ =~ s/\s+$//g for @a;
 
-			print "Searching for times in file $file\n" if $debug;
+			pdebug("Searching for times in file $file");
 			print Dumper(\@a) if $debug;
 
 			if ( defined($a[0])) {
 				if ($a[0] =~ /Begin Snap:/) { 
 					# appears as NNN,NNN.N (mins)
 					$beginTime = $a[2]; 
-					print "Found Begin Time: $beginTime\n" if $debug;
+					pdebug("Found Begin Time: $beginTime");
 				}
 				elsif ($a[0] =~ /Elapsed:/) { 
 					# appears as NNN,NNN.N (mins)
@@ -156,7 +156,7 @@ foreach my $file (@ARGV) {
 					$elapsedTime *= 60;
 				}
 				elsif ($a[0] =~ /DB Time:/) { 
-					print "\$a[2]: $a[2]\n" if $debug;
+					pdebug("\$a[2]: $a[2]");
 					# appears as NNN,NNN.N (mins)
 					$dbTime = (split(/\s+/,$a[2]))[0];
 					$dbTime =~ s/,//go;
@@ -177,7 +177,9 @@ foreach my $file (@ARGV) {
 
 	%rptFormat = (
 		'Load Profile'										=> ['Per Second',1,99999,'load-profile'],
-		'Top 5 Timed Foreground Events'				=> ['Event',0,99999,'top-foreground-events'],
+		#'Top 5 Timed Foreground Events'				=> ['Event',0,99999,'top-foreground-events'],
+		'Top 10 Foreground Events by Total Wait Time'		
+																=> ['Event',0,99999,'top-10-foreground-events'],
 		'Host CPU'											=> ['Load Average Begin',0,99999,'host-cpu'],
 		'Instance CPU'										=> ['%Total CPU',0,99999,'instance-cpu'],
 		'Memory Statistics'								=> ['Begin',1,99999,'memory-stats'],
@@ -249,7 +251,7 @@ foreach my $file (@ARGV) {
 		if ($headerSearch) {
 			#print "line: $line\n";
 			# quotemeta prefixes special characters with a backslash
-			print "looking for headings\n" if $debug;
+			pdebug("looking for headings");
 			#
 			# remove unpredictable info from Host CPU heading
 			if ($line =~ /^Host CPU /) { $line = 'Host CPU' }
@@ -257,7 +259,7 @@ foreach my $file (@ARGV) {
 			my $testLine = quotemeta($line);
 
 			if ( grep(/^$testLine/,@headers)) {
-				print "found header: |$line|\n" if $debug;
+				pdebug("found header: |$line|");
 				$currHeader = $line;
 				$headerSearch=0;
 				$dataSearch=1;
@@ -283,21 +285,21 @@ foreach my $file (@ARGV) {
 				my $currColumn = $a[ $searchColumnNum ];
 				$currColumn =~ s/\s+$//o;
 
-				print "current column: |$currColumn|\n" if $debug;
-				print "Searching for |$searchColumn|\n" if $debug;
+				pdebug("current column: |$currColumn|");
+			 	pdebug("Searching for |$searchColumn|");
 
 				if ($currColumn eq $searchColumn ) {
 
-					print "Found Column Header: $searchColumn\n" if $debug;
+					pdebug("Found Column Header: $searchColumn");
 
-					print join(" : ", @a),"\n" if $debug;
+					pdebug(join(" : ", @a));
 
 					$rptData{$beginTime}->{$currHeader}{columns}=\@a;
 
 					$dataFound=1;
 				}
 			} else { # reading data for heading
-				print "reading data\n" if $debug;
+				pdebug("reading data");
 				if ( $a[0] =~ /$endDataMarker/ ) {
 						$dataFound=0;
 						$headerSearch=1;
@@ -311,7 +313,7 @@ foreach my $file (@ARGV) {
 
 					push @{$rptData{$beginTime}->{$currHeader}{data}},\@a;
 
-					print join(" : ", @a),"\n" if $debug;
+					pdebug(join(" : ", @a));
 
 				}
 
@@ -384,6 +386,8 @@ my $printColumnNames=1;
 
 foreach my $beginTime ( keys %rptData ) {
 
+	pdebug ("BeginTime: $beginTime");
+
 	my ($dbSeconds, $elapsedSeconds) = (
 		$rptData{$beginTime}->{dbSeconds},
 		$rptData{$beginTime}->{elapsedSeconds},
@@ -393,15 +397,17 @@ foreach my $beginTime ( keys %rptData ) {
 	
 	foreach my $heading ( keys %rptFormat ) {
 
-		print qq{
+		pdebug ("   Heading: $heading");
 
-beginTime: $beginTime
-  heading: $heading
+		my @columns=();
+		eval {
+			@columns=@{$rptData{$beginTime}->{$heading}{columns}};
+			unshift @columns, 'BeginTime','ElapsedSeconds','DBSeconds';
+		};
+		
 
-} if $debug;
-
-		my @columns=@{$rptData{$beginTime}->{$heading}{columns}};
-		unshift @columns, 'BeginTime','ElapsedSeconds','DBSeconds';
+		# if there is no data for this $rptData{time}->{$heading}, just skip to the next one
+		next if $@; 
 
 		# remove the delimiter from the data as needed
 		$_ =~ s/$delimiter//g for @columns;
@@ -425,4 +431,17 @@ beginTime: $beginTime
 }
 
 
+# send a string
+sub pdebug {
+
+	return unless $debug;
+	my $line = shift;
+
+	print '=' x 80 . "\n";
+	print "$line\n";
+	print '=' x 80 . "\n";
+
+	return;
+
+}
 
